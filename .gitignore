@@ -1,0 +1,9 @@
+.vscode
+data_details.ipynb
+datadetails.ipynb
+__pycache__
+sample_data.csv
+test.csv
+train_and_save_model.py
+train_data.csv
+save.ipynb
