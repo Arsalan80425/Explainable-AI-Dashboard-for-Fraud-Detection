@@ -82,7 +82,6 @@ streamlit run fraud_detection_dashboard.py
 ├── shap_explainer.pkl                # explains features contribution to the prediction
 ├── feature_names.pkl                 # Track of Features
 ├── model_metrics.pkl                 # Model Report
-├── best_classification_threshold.pkl # Best Threshold value
 ├── requirements.txt                  # Python dependencies
 └── README.md                         # Project documentation
 ```

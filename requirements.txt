@@ -5,3 +5,4 @@ plotly
 scikit-learn
 lightgbm
 shap
+joblib

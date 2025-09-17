@@ -74,6 +74,8 @@ if 'label_encoders' not in st.session_state:
     st.session_state.label_encoders = None
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = None
+if 'current_transaction' not in st.session_state:
+    st.session_state.current_transaction = None
 
 # Load pre-trained model and artifacts
 @st.cache_resource
@@ -145,7 +147,7 @@ def generate_counterfactual_explanation(instance, prediction_proba, model, featu
     if not isinstance(instance, np.ndarray):
         instance = np.array(instance)
     
-    threshold = 0.5
+    threshold = 0.11
     is_fraud = prediction_proba > threshold
     
     suggestions = []
@@ -422,91 +424,125 @@ def show_transaction_analysis():
     # Analysis options
     analysis_type = st.radio(
         "Choose analysis method:", 
-        ["🎯 Manual Input"],
+        ["🎯 Manual Input", "🎲 Random Entry"],
         horizontal=True
     )
     
-    # Transaction selection - Manual Input only
-    st.subheader("📝 Enter Transaction Feature Values Manually")
+    # Transaction selection - Manual Input or Random Entry
+    st.subheader("📝 Enter Transaction Feature Values")
     
-    # Create input form for key features
-    with st.form("transaction_input"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            transaction_amt = st.number_input(
-                "Transaction Amount ($)",
-                min_value=0.0,
-                value=150.0,
-                step=1.0,
-                help="Enter the transaction amount in USD"
-            )
-            
-            transaction_hour = st.slider(
-                "Transaction Hour (0-23)",
-                min_value=0,
-                max_value=23,
-                value=14,
-                help="Hour of the day when transaction occurred"
-            )
-            
-            transaction_dow = st.selectbox(
-                "Day of Week",
-                options=[0, 1, 2, 3, 4, 5, 6],
-                format_func=lambda x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][x],
-                index=2,
-                help="Day of the week (0=Monday, 6=Sunday)"
-            )
-        
-        with col2:
-            product_cd = st.selectbox(
-                "Product Code",
-                options=['W', 'H', 'C', 'S', 'R'],
-                index=0,
-                help="Product category code"
-            )
-            
-            card4 = st.selectbox(
-                "Card Type",
-                options=['visa', 'mastercard', 'american express', 'discover'],
-                index=0,
-                help="Credit card network"
-            )
-            
-            p_emaildomain = st.selectbox(
-                "Email Domain",
-                options=['gmail.com', 'yahoo.com', 'hotmail.com', 'other'],
-                index=0,
-                help="Email domain of purchaser"
-            )
-        
-        submitted = st.form_submit_button("🔍 Analyze Transaction")
-        
-        if submitted:
-            # Create transaction data dictionary
-            input_data = {
-                'TransactionAmt': transaction_amt,
-                'TransactionHour': transaction_hour,
-                'TransactionDayOfWeek': transaction_dow,
-                'ProductCD': product_cd,
-                'card4': card4,
-                'P_emaildomain': p_emaildomain
+    if analysis_type == "🎲 Random Entry":
+        # Generate random transaction data
+        if st.button("🎲 Generate Random Transaction"):
+            # Create random transaction data
+            random_data = {
+                'TransactionAmt': np.random.randint(10, 1000),
+                'TransactionHour': np.random.randint(0, 24),
+                'TransactionDayOfWeek': np.random.randint(0, 7),
+                'ProductCD': np.random.choice(['W', 'H', 'C', 'S', 'R']),
+                'card4': np.random.choice(['visa', 'mastercard', 'american express', 'discover']),
+                'P_emaildomain': np.random.choice(['gmail.com', 'yahoo.com', 'hotmail.com', 'other'])
             }
             
-            try:
-                # Store in session state
-                st.session_state.current_transaction = {
-                    'data': input_data,
-                    'label': 'Manual Input',
-                    'index': 'Manual'
-                }
-                st.success("✅ Manual transaction ready for analysis!")
+            # Store in session state
+            st.session_state.current_transaction = {
+                'data': random_data,
+                'label': 'Random Entry',
+                'index': 'Random'
+            }
+            st.success("✅ Random transaction generated! Ready for analysis.")
+    
+    # Manual input form (only show for manual input option)
+    if analysis_type == "🎯 Manual Input":
+        with st.form("transaction_input"):
+            col1, col2 = st.columns(2)
             
-            except Exception as e:
-                st.error(f"❌ Error preparing manual input: {str(e)}")
+            with col1:
+                transaction_amt = st.number_input(
+                    "Transaction Amount ($)",
+                    min_value=0.0,
+                    value=150.0,
+                    step=1.0,
+                    help="Enter the transaction amount in USD"
+                )
+                
+                transaction_hour = st.slider(
+                    "Transaction Hour (0-23)",
+                    min_value=0,
+                    max_value=23,
+                    value=14,
+                    help="Hour of the day when transaction occurred"
+                )
+                
+                transaction_dow = st.selectbox(
+                    "Day of Week",
+                    options=[0, 1, 2, 3, 4, 5, 6],
+                    format_func=lambda x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][x],
+                    index=2,
+                    help="Day of the week (0=Monday, 6=Sunday)"
+                )
+            
+            with col2:
+                product_cd = st.selectbox(
+                    "Product Code",
+                    options=['W', 'H', 'C', 'S', 'R'],
+                    index=0,
+                    help="Product category code"
+                )
+                
+                card4 = st.selectbox(
+                    "Card Type",
+                    options=['visa', 'mastercard', 'american express', 'discover'],
+                    index=0,
+                    help="Credit card network"
+                )
+                
+                p_emaildomain = st.selectbox(
+                    "Email Domain",
+                    options=['gmail.com', 'yahoo.com', 'hotmail.com', 'other'],
+                    index=0,
+                    help="Email domain of purchaser"
+                )
+            
+            submitted = st.form_submit_button("🔍 Analyze Transaction")
+            
+            if submitted:
+                # Create transaction data dictionary
+                input_data = {
+                    'TransactionAmt': transaction_amt,
+                    'TransactionHour': transaction_hour,
+                    'TransactionDayOfWeek': transaction_dow,
+                    'ProductCD': product_cd,
+                    'card4': card4,
+                    'P_emaildomain': p_emaildomain
+                }
+                
+                try:
+                    # Store in session state
+                    st.session_state.current_transaction = {
+                        'data': input_data,
+                        'label': 'Manual Input',
+                        'index': 'Manual'
+                    }
+                    st.success("✅ Manual transaction ready for analysis!")
+                
+                except Exception as e:
+                    st.error(f"❌ Error preparing manual input: {str(e)}")
+    
+    # Display current transaction details if available
+    if st.session_state.current_transaction is not None:
+        transaction = st.session_state.current_transaction
+        st.info(f"**Current Transaction:** {transaction['label']}")
+        
+        # Show transaction details in a nice format
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Transaction Details:**")
+            for key, value in transaction['data'].items():
+                st.write(f"**{key}:** {value}")
     
     # Analyze selected transaction
-    if 'current_transaction' in st.session_state:
+    if st.session_state.current_transaction is not None:
         transaction = st.session_state.current_transaction
         raw_data = transaction['data']
         actual_label = transaction['label']
