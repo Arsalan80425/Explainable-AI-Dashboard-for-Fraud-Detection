@@ -3,11 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import (confusion_matrix, classification_report, 
-                           roc_auc_score, roc_curve, precision_recall_curve,
-                           accuracy_score, f1_score)
+from sklearn.metrics import confusion_matrix, classification_report
 import lightgbm as lgb
 import shap
 import joblib
@@ -74,36 +70,12 @@ if 'explainer' not in st.session_state:
     st.session_state.explainer = None
 if 'feature_names' not in st.session_state:
     st.session_state.feature_names = None
-if 'train_data' not in st.session_state:
-    st.session_state.train_data = None
 if 'label_encoders' not in st.session_state:
     st.session_state.label_encoders = None
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = None
 
-@st.cache_data
-def load_preprocessed_data(train_path='train_data.csv', sample_size=None):
-    """Load your preprocessed data file"""
-    try:
-        df_train = pd.read_csv(train_path)
-        
-        # Sample data if specified
-        if sample_size and sample_size < len(df_train):
-            df_train = df_train.sample(n=sample_size, random_state=42)
-        
-        st.success(f"✅ Loaded train data: {df_train.shape[0]} rows, {df_train.shape[1]} columns")
-        
-        return df_train
-    
-    except FileNotFoundError as e:
-        st.error(f"❌ Data files not found: {str(e)}")
-        st.error("Please ensure 'train_data.csv' is in the same directory.")
-        return None
-    except Exception as e:
-        st.error(f"❌ Error loading data: {str(e)}")
-        return None
-
-# Load saved artifacts instead of training
+# Load pre-trained model and artifacts
 @st.cache_resource
 def load_model_and_artifacts():
     """Load pre-trained model and related artifacts"""
@@ -112,19 +84,7 @@ def load_model_and_artifacts():
         explainer = joblib.load('shap_explainer.pkl')
         label_encoders = joblib.load('label_encoders.pkl')
         feature_names = joblib.load('feature_names.pkl')
-        
-        # Try to load model metrics if available
-        try:
-            model_metrics = joblib.load('model_metrics.pkl')
-        except:
-            # Create default metrics if not available
-            model_metrics = {
-                'roc_auc': 0.95,  # placeholder values
-                'accuracy': 0.92,
-                'f1_score': 0.88,
-                'precision': 0.90,
-                'recall': 0.86
-            }
+        model_metrics = joblib.load('model_metrics.pkl')
         
         return model, explainer, label_encoders, feature_names, model_metrics
     
@@ -136,12 +96,12 @@ def load_model_and_artifacts():
         - shap_explainer.pkl  
         - label_encoders.pkl
         - feature_names.pkl
-        - model_metrics.pkl (optional)
+        - model_metrics.pkl
         """)
-        return None, None, None, None, None
+        st.stop()
     except Exception as e:
         st.error(f"❌ Error loading model artifacts: {str(e)}")
-        return None, None, None, None, None
+        st.stop()
 
 def prepare_features_for_prediction(instance_data, label_encoders, feature_names):
     """Prepare a single instance for prediction using saved encoders"""
@@ -326,29 +286,7 @@ def main():
         st.header("🚀 Navigation")
         page = st.radio("Select Page", 
                        ["🏠 Model Overview", "🔍 Transaction Analysis", 
-                        "📊 Model Performance", "📋 Batch Analysis", "ℹ️ About"])
-        
-        st.markdown("---")
-        
-        # Data loading section
-        st.header("⚙️ Configuration")
-        
-        use_sample = st.checkbox("Use sample data (faster)", value=True)
-        sample_size = None
-        if use_sample:
-            sample_size = st.number_input("Sample size", 
-                                         min_value=1000, 
-                                         max_value=100000, 
-                                         value=20000,
-                                         step=5000)
-        
-        if st.button("🔄 Load/Reload Data and Model"):
-            # Clear cache and reset session state
-            st.cache_data.clear()
-            st.cache_resource.clear()
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+                        "📊 Model Performance", "ℹ️ About"])
         
         st.markdown("---")
         
@@ -362,50 +300,33 @@ def main():
         else:
             st.info("⏳ Loading Model...")
     
-    # Load data and model if not already done
+    # Load model if not already done
     if st.session_state.model is None:
-        with st.spinner("🔄 Loading data and pre-trained model..."):
-            # Load preprocessed data
-            df_train = load_preprocessed_data(sample_size=sample_size if use_sample else None)
-            
-            if df_train is not None:
-                st.session_state.train_data = df_train
+        with st.spinner("🔄 Loading pre-trained model and artifacts..."):
+            # Load pre-trained model and artifacts
+            try:
+                model, explainer, label_encoders, feature_names, model_metrics = load_model_and_artifacts()
                 
-                # Display data info
-                st.info(f"📊 Training data shape: {df_train.shape}")
-                st.info(f"🎯 Fraud rate: {df_train['isFraud'].mean():.2%}")
+                # Store results in session state
+                st.session_state.model = model
+                st.session_state.explainer = explainer
+                st.session_state.label_encoders = label_encoders
+                st.session_state.feature_names = feature_names
+                st.session_state.model_metrics = model_metrics
                 
-                # Load pre-trained model and artifacts
-                try:
-                    model, explainer, label_encoders, feature_names, model_metrics = load_model_and_artifacts()
+                st.success("✅ Pre-trained model loaded successfully!")
+                
+                # Display model metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("ROC-AUC", f"{model_metrics['roc_auc']:.4f}")
+                with col2:
+                    st.metric("Accuracy", f"{model_metrics['accuracy']:.4f}")
+                with col3:
+                    st.metric("F1-Score", f"{model_metrics['f1_score']:.4f}")
                     
-                    if model is not None:
-                        # Store results in session state
-                        st.session_state.model = model
-                        st.session_state.explainer = explainer
-                        st.session_state.label_encoders = label_encoders
-                        st.session_state.feature_names = feature_names
-                        st.session_state.model_metrics = model_metrics
-                        
-                        st.success("✅ Pre-trained model loaded successfully!")
-                        
-                        # Display model metrics
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("ROC-AUC", f"{model_metrics['roc_auc']:.4f}")
-                        with col2:
-                            st.metric("Accuracy", f"{model_metrics['accuracy']:.4f}")
-                        with col3:
-                            st.metric("F1-Score", f"{model_metrics['f1_score']:.4f}")
-                    else:
-                        st.error("❌ Failed to load pre-trained model. Please check your model files.")
-                        st.stop()
-                
-                except Exception as e:
-                    st.error(f"❌ Error loading model: {str(e)}")
-                    st.stop()
-            else:
-                st.error("❌ Failed to load data. Please check your data files.")
+            except Exception as e:
+                st.error(f"❌ Error loading model: {str(e)}")
                 st.stop()
     
     # Page routing
@@ -415,8 +336,6 @@ def main():
         show_transaction_analysis()
     elif page == "📊 Model Performance":
         show_model_performance()
-    elif page == "📋 Batch Analysis":
-        show_batch_analysis()
     else:
         show_about()
 
@@ -441,37 +360,7 @@ def show_model_overview():
     
     st.markdown("---")
     
-    # Dataset information
-    if st.session_state.train_data is not None:
-        st.subheader("📊 Dataset Overview")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Class distribution
-            fraud_count = (st.session_state.train_data['isFraud'] == 1).sum()
-            legit_count = (st.session_state.train_data['isFraud'] == 0).sum()
-            
-            fig = go.Figure(data=[
-                go.Bar(x=['Legitimate', 'Fraud'], 
-                      y=[legit_count, fraud_count],
-                      marker_color=['green', 'red'])
-            ])
-            fig.update_layout(title="Class Distribution", height=400)
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            # Feature count info
-            feature_count = len(st.session_state.feature_names)
-            
-            fig = go.Figure(data=[
-                go.Pie(labels=['Total Features'], 
-                      values=[feature_count],
-                      hole=.3)
-            ])
-            fig.update_layout(title=f"Total Features: {feature_count}", height=400)
-            st.plotly_chart(fig, use_container_width=True)
-    
-    # Feature importance analysis (if available)
+    # Feature importance analysis
     if st.session_state.model is not None:
         st.subheader("🎯 Feature Importance Analysis")
         
@@ -511,7 +400,6 @@ def show_model_overview():
         - **Real-time Predictions**: Instant fraud scoring for transactions
         - **Explainable Results**: SHAP-based feature contribution analysis
         - **Counterfactual Analysis**: What-if scenario modeling
-        - **Batch Processing**: Analyze multiple transactions efficiently
         
         **⚡ Performance Highlights:**
         - High precision reduces false positives (legitimate transactions blocked)
@@ -532,113 +420,90 @@ def show_transaction_analysis():
     """)
     
     # Analysis options
-    col1, col2 = st.columns([2, 1])
+    analysis_type = st.radio(
+        "Choose analysis method:", 
+        ["🎯 Manual Input"],
+        horizontal=True
+    )
     
-    with col1:
-        analysis_type = st.radio(
-            "Choose analysis method:", 
-            ["🎯 Manual Input", "🎲 Random Sample Transaction"],
-            horizontal=True
-        )
+    # Transaction selection - Manual Input only
+    st.subheader("📝 Enter Transaction Feature Values Manually")
     
-    with col2:
-        if st.button("🔄 Get New Analysis"):
-            if 'current_transaction' in st.session_state:
-                del st.session_state['current_transaction']
-    
-    # Transaction selection
-    if analysis_type == "🎲 Random Sample Transaction":
-        if st.session_state.train_data is not None:
-            if 'current_transaction' not in st.session_state or st.button("🎲 Get Random Transaction"):
-                # Sample from training data
-                sample_data = st.session_state.train_data.sample(n=1).iloc[0]
-                
-                st.session_state.current_transaction = {
-                    'data': sample_data.drop('isFraud') if 'isFraud' in sample_data.index else sample_data,
-                    'label': sample_data.get('isFraud', 'Unknown'),
-                    'index': 'Random Sample'
-                }
-        else:
-            st.warning("No training data loaded for sampling.")
-    
-    else:  # Manual Input
-        st.subheader("📝 Enter Transaction Feature Values Manually")
+    # Create input form for key features
+    with st.form("transaction_input"):
+        col1, col2 = st.columns(2)
         
-        # Create input form for key features
-        with st.form("transaction_input"):
-            col1, col2 = st.columns(2)
+        with col1:
+            transaction_amt = st.number_input(
+                "Transaction Amount ($)",
+                min_value=0.0,
+                value=150.0,
+                step=1.0,
+                help="Enter the transaction amount in USD"
+            )
             
-            with col1:
-                transaction_amt = st.number_input(
-                    "Transaction Amount ($)",
-                    min_value=0.0,
-                    value=150.0,
-                    step=1.0,
-                    help="Enter the transaction amount in USD"
-                )
-                
-                transaction_hour = st.slider(
-                    "Transaction Hour (0-23)",
-                    min_value=0,
-                    max_value=23,
-                    value=14,
-                    help="Hour of the day when transaction occurred"
-                )
-                
-                transaction_dow = st.selectbox(
-                    "Day of Week",
-                    options=[0, 1, 2, 3, 4, 5, 6],
-                    format_func=lambda x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][x],
-                    index=2,
-                    help="Day of the week (0=Monday, 6=Sunday)"
-                )
+            transaction_hour = st.slider(
+                "Transaction Hour (0-23)",
+                min_value=0,
+                max_value=23,
+                value=14,
+                help="Hour of the day when transaction occurred"
+            )
             
-            with col2:
-                product_cd = st.selectbox(
-                    "Product Code",
-                    options=['W', 'H', 'C', 'S', 'R'],
-                    index=0,
-                    help="Product category code"
-                )
-                
-                card4 = st.selectbox(
-                    "Card Type",
-                    options=['visa', 'mastercard', 'american express', 'discover'],
-                    index=0,
-                    help="Credit card network"
-                )
-                
-                p_emaildomain = st.selectbox(
-                    "Email Domain",
-                    options=['gmail.com', 'yahoo.com', 'hotmail.com', 'other'],
-                    index=0,
-                    help="Email domain of purchaser"
-                )
+            transaction_dow = st.selectbox(
+                "Day of Week",
+                options=[0, 1, 2, 3, 4, 5, 6],
+                format_func=lambda x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][x],
+                index=2,
+                help="Day of the week (0=Monday, 6=Sunday)"
+            )
+        
+        with col2:
+            product_cd = st.selectbox(
+                "Product Code",
+                options=['W', 'H', 'C', 'S', 'R'],
+                index=0,
+                help="Product category code"
+            )
             
-            submitted = st.form_submit_button("🔍 Analyze Transaction")
+            card4 = st.selectbox(
+                "Card Type",
+                options=['visa', 'mastercard', 'american express', 'discover'],
+                index=0,
+                help="Credit card network"
+            )
             
-            if submitted:
-                # Create transaction data dictionary
-                input_data = {
-                    'TransactionAmt': transaction_amt,
-                    'TransactionHour': transaction_hour,
-                    'TransactionDayOfWeek': transaction_dow,
-                    'ProductCD': product_cd,
-                    'card4': card4,
-                    'P_emaildomain': p_emaildomain
+            p_emaildomain = st.selectbox(
+                "Email Domain",
+                options=['gmail.com', 'yahoo.com', 'hotmail.com', 'other'],
+                index=0,
+                help="Email domain of purchaser"
+            )
+        
+        submitted = st.form_submit_button("🔍 Analyze Transaction")
+        
+        if submitted:
+            # Create transaction data dictionary
+            input_data = {
+                'TransactionAmt': transaction_amt,
+                'TransactionHour': transaction_hour,
+                'TransactionDayOfWeek': transaction_dow,
+                'ProductCD': product_cd,
+                'card4': card4,
+                'P_emaildomain': p_emaildomain
+            }
+            
+            try:
+                # Store in session state
+                st.session_state.current_transaction = {
+                    'data': input_data,
+                    'label': 'Manual Input',
+                    'index': 'Manual'
                 }
-                
-                try:
-                    # Store in session state
-                    st.session_state.current_transaction = {
-                        'data': input_data,
-                        'label': 'Manual Input',
-                        'index': 'Manual'
-                    }
-                    st.success("✅ Manual transaction ready for analysis!")
-                
-                except Exception as e:
-                    st.error(f"❌ Error preparing manual input: {str(e)}")
+                st.success("✅ Manual transaction ready for analysis!")
+            
+            except Exception as e:
+                st.error(f"❌ Error preparing manual input: {str(e)}")
     
     # Analyze selected transaction
     if 'current_transaction' in st.session_state:
@@ -652,20 +517,11 @@ def show_transaction_analysis():
         
         try:
             # Prepare data for prediction
-            if isinstance(raw_data, dict):
-                # Manual input
-                prepared_data = prepare_features_for_prediction(
-                    raw_data, 
-                    st.session_state.label_encoders, 
-                    st.session_state.feature_names
-                )
-            else:
-                # Sample from data
-                prepared_data = prepare_features_for_prediction(
-                    raw_data.to_dict(), 
-                    st.session_state.label_encoders, 
-                    st.session_state.feature_names
-                )
+            prepared_data = prepare_features_for_prediction(
+                raw_data, 
+                st.session_state.label_encoders, 
+                st.session_state.feature_names
+            )
             
             instance = prepared_data.iloc[0].values
             
@@ -688,11 +544,8 @@ def show_transaction_analysis():
             with col2:
                 # Input data summary
                 st.info("**Transaction Details:**")
-                if isinstance(raw_data, dict):
-                    for key, value in raw_data.items():
-                        st.text(f"{key}: {value}")
-                else:
-                    st.text("Sample from training data")
+                for key, value in raw_data.items():
+                    st.text(f"{key}: {value}")
             
             with col3:
                 # Risk gauge
@@ -923,129 +776,7 @@ def show_model_performance():
             if overall_score > 0.8:
                 st.metric("Overall Performance", "Excellent", delta="Production Ready")
     else:
-        st.warning("Model metrics not available. Load a model with saved metrics for detailed performance analysis.")
-
-def show_batch_analysis():
-    """Show batch prediction analysis using pre-trained model"""
-    st.header("📋 Batch Prediction Analysis")
-    
-    st.markdown("""
-    Analyze multiple transactions in batch to understand model behavior patterns.
-    """)
-    
-    if st.session_state.train_data is not None:
-        # Batch analysis options
-        batch_size = st.slider("Number of transactions to analyze", 10, min(100, len(st.session_state.train_data)), 50)
-        
-        if st.button("🚀 Run Batch Analysis"):
-            with st.spinner("Running batch analysis..."):
-                # Get sample of transactions
-                sample_data = st.session_state.train_data.sample(n=batch_size, random_state=42)
-                
-                # Prepare features for prediction
-                batch_predictions = []
-                batch_probabilities = []
-                actual_labels = []
-                
-                for idx, row in sample_data.iterrows():
-                    try:
-                        # Extract actual label
-                        actual_label = row.get('isFraud', -1)
-                        actual_labels.append(actual_label)
-                        
-                        # Prepare features
-                        row_data = row.drop('isFraud') if 'isFraud' in row.index else row
-                        prepared_data = prepare_features_for_prediction(
-                            row_data.to_dict(), 
-                            st.session_state.label_encoders, 
-                            st.session_state.feature_names
-                        )
-                        
-                        # Make prediction
-                        instance = prepared_data.iloc[0].values
-                        pred_proba = st.session_state.model.predict_proba([instance])[0, 1]
-                        pred = int(pred_proba > 0.5)
-                        
-                        batch_predictions.append(pred)
-                        batch_probabilities.append(pred_proba)
-                        
-                    except Exception as e:
-                        st.warning(f"Skipping row {idx} due to error: {str(e)}")
-                        continue
-                
-                if len(batch_predictions) > 0:
-                    # Create results DataFrame
-                    results_df = pd.DataFrame({
-                        'Actual': actual_labels[:len(batch_predictions)],
-                        'Predicted': batch_predictions,
-                        'Fraud_Probability': batch_probabilities,
-                        'Correct': [a == p for a, p in zip(actual_labels[:len(batch_predictions)], batch_predictions)]
-                    })
-                    
-                    # Summary statistics
-                    st.subheader("📊 Batch Results Summary")
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        accuracy = results_df['Correct'].mean() if len(results_df['Correct']) > 0 else 0
-                        st.metric("Batch Accuracy", f"{accuracy:.1%}")
-                    
-                    with col2:
-                        fraud_detected = results_df['Predicted'].sum()
-                        st.metric("Fraud Detected", fraud_detected)
-                    
-                    with col3:
-                        avg_fraud_prob = results_df['Fraud_Probability'].mean()
-                        st.metric("Avg Fraud Probability", f"{avg_fraud_prob:.1%}")
-                    
-                    with col4:
-                        if 'Actual' in results_df.columns:
-                            false_positives = len(results_df[(results_df['Actual'] == 0) & (results_df['Predicted'] == 1)])
-                            st.metric("False Positives", false_positives)
-                        else:
-                            st.metric("False Positives", "N/A")
-                    
-                    # Probability distribution
-                    st.subheader("📈 Fraud Probability Distribution")
-                    
-                    fig = go.Figure()
-                    
-                    # All transactions
-                    fig.add_trace(go.Histogram(
-                        x=results_df['Fraud_Probability'],
-                        name='All Transactions',
-                        opacity=0.7,
-                        nbinsx=20,
-                        marker_color='blue'
-                    ))
-                    
-                    fig.add_vline(x=0.5, line_dash="dash", line_color="black", 
-                                 annotation_text="Decision Threshold (0.5)")
-                    
-                    fig.update_layout(
-                        title="Distribution of Fraud Probabilities",
-                        xaxis_title="Fraud Probability",
-                        yaxis_title="Count",
-                        height=400
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Detailed results table
-                    st.subheader("📋 Sample Results")
-                    
-                    # Show first 20 results
-                    display_df = results_df.head(20).copy()
-                    if 'Actual' in display_df.columns:
-                        display_df['Actual'] = display_df['Actual'].map({0: 'Legitimate', 1: 'Fraud', -1: 'Unknown'})
-                    display_df['Predicted'] = display_df['Predicted'].map({0: 'Legitimate', 1: 'Fraud'})
-                    display_df['Fraud_Probability'] = display_df['Fraud_Probability'].apply(lambda x: f"{x:.1%}")
-                    
-                    st.dataframe(display_df, use_container_width=True, hide_index=True)
-                    
-                else:
-                    st.error("No successful predictions in batch analysis.")
-    else:
-        st.warning("No training data available for batch analysis. Please load data first.")
+        st.warning("Model metrics not available.")
 
 def show_about():
     """Show information about the dashboard"""
@@ -1075,7 +806,6 @@ def show_about():
     #### 📊 Analysis Capabilities
     - **Individual Transaction Analysis**: Deep-dive explanations for single transactions
     - **Manual Input**: Test custom transaction scenarios
-    - **Batch Processing**: Analyze multiple transactions efficiently
     - **Performance Monitoring**: Track model effectiveness
     
     ### 🏗️ Technical Architecture
@@ -1088,10 +818,9 @@ def show_about():
     5. **model_metrics.pkl**: Performance benchmarks and evaluation metrics
     
     #### Data Processing Pipeline
-    1. **Data Loading**: Load your preprocessed train_data.csv
-    2. **Feature Preparation**: Apply consistent encoding and preprocessing
-    3. **Prediction**: Use pre-trained model for instant fraud scoring
-    4. **Explanation**: Generate SHAP-based explanations
+    1. **Feature Preparation**: Apply consistent encoding and preprocessing
+    2. **Prediction**: Use pre-trained model for instant fraud scoring
+    3. **Explanation**: Generate SHAP-based explanations
     
     ### 💼 Business Value
     
@@ -1108,20 +837,10 @@ def show_about():
     - **Performance Analysis**: Evaluate model effectiveness
     - **Counterfactual Analysis**: Advanced explanation techniques
     
-    ### 📈 Model Advantages
-    
-    **Pre-trained Model Benefits:**
-    - ⚡ **Fast Deployment**: Ready for immediate use
-    - 🎯 **Proven Performance**: Validated on training data
-    - 🔄 **Consistent Results**: Reproducible predictions
-    - 📊 **Known Metrics**: Performance benchmarks available
-    - 🛠️ **Easy Integration**: Standard sklearn-compatible interface
-    
     ### 🚀 Getting Started
     
     #### Required Files
     Make sure you have these files in your working directory:
-    - `train_data.csv` - Your preprocessed training data
     - `fraud_detection_model.pkl` - Pre-trained model
     - `shap_explainer.pkl` - SHAP explainer
     - `label_encoders.pkl` - Feature encoders
@@ -1129,73 +848,13 @@ def show_about():
     - `model_metrics.pkl` - Model performance metrics
     
     #### Quick Start Steps
-    1. **Load Data**: Ensure train_data.csv is available
-    2. **Load Model**: Pre-trained artifacts load automatically
-    3. **Analyze Transactions**: Test individual predictions
-    4. **Explore Results**: Use SHAP explanations and counterfactuals
-    5. **Batch Analysis**: Process multiple transactions for insights
-    
-    ### 🔧 Technology Stack
-    
-    - **Frontend**: Streamlit for interactive dashboard
-    - **ML Framework**: LightGBM for gradient boosting
-    - **Model Persistence**: joblib for saving/loading models
-    - **Explainability**: SHAP for feature importance
-    - **Visualization**: Plotly for interactive charts
-    - **Data Processing**: Pandas, NumPy for data manipulation
-    
-    ### 📚 Key Concepts
-    
-    #### Pre-trained Models
-    Pre-trained models offer several advantages:
-    - **Time Efficiency**: No training required
-    - **Consistency**: Same model behavior across deployments
-    - **Reliability**: Performance characteristics are known
-    - **Scalability**: Easy to deploy across multiple environments
-    
-    #### SHAP (SHapley Additive exPlanations)
-    SHAP values provide unified model interpretation:
-    - **Local Explanations**: Why was this specific transaction flagged?
-    - **Global Explanations**: Which features are most important overall?
-    - **Fair Attribution**: Each feature gets appropriate credit
-    
-    #### Counterfactual Explanations
-    Answer "what-if" questions:
-    - "What if the transaction amount was different?"
-    - "What if this happened during business hours?"
-    - "What if the email domain was verified?"
-    
-    ### ⚠️ Important Notes
-    
-    #### Model Limitations
-    - **Training Data Dependency**: Model performance depends on training data quality
-    - **Feature Drift**: Performance may degrade if new data differs from training data
-    - **Categorical Encodings**: Unknown categories are mapped to default values
-    - **Regular Updates**: Consider retraining periodically with new data
-    
-    #### Best Practices
-    - **Monitor Performance**: Track prediction accuracy over time
-    - **Validate Inputs**: Ensure input features match training format
-    - **Regular Evaluation**: Test model on new data samples
-    - **Explanation Review**: Use SHAP values to understand predictions
-    
-    ### 📞 Support & Usage
-    
-    **For Optimal Results:**
-    - Ensure your input data format matches the training data
-    - Review SHAP explanations to understand model behavior
-    - Use counterfactual analysis for scenario planning
-    - Monitor batch analysis results for performance trends
-    
-    **Technical Considerations:**
-    - Models are loaded once and cached for performance
-    - Feature encoding is applied automatically
-    - Unknown categorical values are handled gracefully
-    - All predictions include confidence scores and explanations
+    1. **Load Model**: Pre-trained artifacts load automatically
+    2. **Analyze Transactions**: Test individual predictions
+    3. **Explore Results**: Use SHAP explanations and counterfactuals
     
     ---
     
-    **Built for transparent and responsible AI in financial services**
+    **Built for transparent and responsible AI in financial services by Arsalan**
     """)
 
 if __name__ == "__main__":

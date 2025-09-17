@@ -76,10 +76,15 @@ streamlit run fraud_detection_dashboard.py
 ## 📂 Project Structure  
 ```
 .
-├── fraud_detection_dashboard.py     # Streamlit dashboard app
-├── train_data.csv                   # Preprocessed training dataset
-├── requirements.txt                # Python dependencies
-└── README.md                       # Project documentation
+├── fraud_detection_dashboard.py      # Streamlit dashboard app
+├── fraud_detection_model.pkl         # Lightgbm model
+├── label_encoders.pkl                # Labels catogerical features into numerical features
+├── shap_explainer.pkl                # explains features contribution to the prediction
+├── feature_names.pkl                 # Track of Features
+├── model_metrics.pkl                 # Model Report
+├── best_classification_threshold.pkl # Best Threshold value
+├── requirements.txt                  # Python dependencies
+└── README.md                         # Project documentation
 ```
 
 ---
