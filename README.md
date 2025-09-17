@@ -1,6 +1,12 @@
 # 🛡️ Explainable AI Fraud Detection Dashboard  
 **Advanced Fraud Detection with Explainability using LightGBM, SHAP, and Streamlit**  
 
+## 🎬 Demo
+
+Visit the live demo at : https://explainable-ai-dashboard-for-fraud-detection.streamlit.app
+
+---
+
 ## 📌 Overview  
 This project implements an **Explainable AI (XAI) fraud detection system** using a **LightGBM classifier** on the IEEE Credit Card Fraud Detection dataset.  
 It provides an interactive dashboard where users can analyze individual transactions, understand model decisions with **SHAP explanations** and **counterfactual suggestions**, and perform batch analysis for multiple transactions.
